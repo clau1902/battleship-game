@@ -11,7 +11,7 @@ An online Battleship game built with Next.js, TypeScript, PostgreSQL, Drizzle OR
 - **Game Persistence**: PostgreSQL with Drizzle ORM for game state persistence
 - **Hidden Ships**: Ships are hidden from opponents - only hits/misses are visible
 - **Responsive Design**: Works on desktop and mobile devices
-- **Real-time Updates**: Long polling and WebSocket support for live game updates
+- **Real-time Updates**: Server-Sent Events (SSE) for live game updates
 - **URL-based Games**: Share game links with query parameters for easy joining
 
 ## Prerequisites
@@ -91,9 +91,7 @@ bun run db:push
 bun run dev
 ```
 
-This will start:
-- Next.js server on http://localhost:3000
-- WebSocket server on ws://localhost:3001
+This will start the Next.js server on http://localhost:3000
 
 6. **Open [http://localhost:3000](http://localhost:3000)** in your browser.
 
@@ -174,7 +172,7 @@ Auth Screen -> Setup Screen -> Placing Screen -> Battle Screen -> Results Screen
 - **Database**: PostgreSQL with Drizzle ORM
 - **Authentication**: Better Auth
 - **Runtime**: Bun
-- **Real-time**: WebSocket + Long Polling
+- **Real-time**: Server-Sent Events (SSE)
 
 ## Project Structure
 
@@ -202,6 +200,8 @@ battleship-game/
 ├── lib/
 │   ├── auth.ts             # Better Auth server configuration
 │   ├── auth-client.ts      # Better Auth client configuration
+│   ├── sse-manager.ts      # SSE connection manager (server)
+│   ├── sse-client.ts       # SSE client for real-time updates
 │   ├── game-logic.ts       # Game logic and rules
 │   ├── db.ts               # Database connection
 │   └── utils.ts            # Utility functions

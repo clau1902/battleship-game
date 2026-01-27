@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/components/ui/use-toast";
 import type { Game, PlayerRole, ShipType, GameScreen } from "@/types/game";
-import { GameWebSocketClient } from "@/lib/websocket-client";
+import { GameSSEClient } from "@/lib/sse-client";
 import { getPlayerView } from "@/lib/game-mask";
 import { useSession } from "@/lib/auth-client";
 import {
@@ -21,7 +21,7 @@ export default function Home() {
   const [game, setGame] = useState<Game | null>(null);
   const [playerRole, setPlayerRole] = useState<PlayerRole | null>(null);
   const [screen, setScreen] = useState<GameScreen>("auth");
-  const [wsClient, setWsClient] = useState<GameWebSocketClient | null>(null);
+  const [sseClient, setSSEClient] = useState<GameSSEClient | null>(null);
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -228,12 +228,12 @@ export default function Home() {
     };
   }, [game?._id, game?.status, game?.currentTurn, game?.player2Id, game?.player1Ready, game?.player2Ready, playerRole, toast]);
 
-  // WebSocket connection for real-time updates (fallback/alternative)
+  // SSE connection for real-time updates
   useEffect(() => {
     if (!game || !game._id || !playerRole || game.status === "finished") {
-      if (wsClient) {
-        wsClient.disconnect();
-        setWsClient(null);
+      if (sseClient) {
+        sseClient.disconnect();
+        setSSEClient(null);
       }
       return;
     }
@@ -241,13 +241,12 @@ export default function Home() {
     const gameId = game._id;
     const hadPlayer2 = !!game.player2Id;
 
-    const client = new GameWebSocketClient();
+    const client = new GameSSEClient();
     client.connect(gameId, playerRole, (updatedGame: Game) => {
-      const maskedGame = getPlayerView(updatedGame, playerRole);
       const hasPlayer2Changed = !hadPlayer2 && updatedGame.player2Id;
 
       setGame((prevGame) => {
-        if (!prevGame) return maskedGame;
+        if (!prevGame) return updatedGame;
 
         if (hasPlayer2Changed && playerRole === "player1") {
           toast({
@@ -263,13 +262,13 @@ export default function Home() {
           });
         }
 
-        return maskedGame;
+        return updatedGame;
       });
 
-      sessionStorage.setItem("battleship-game", JSON.stringify(maskedGame));
+      sessionStorage.setItem("battleship-game", JSON.stringify(updatedGame));
     });
 
-    setWsClient(client);
+    setSSEClient(client);
 
     return () => {
       client.disconnect();

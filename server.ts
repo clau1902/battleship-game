@@ -1,12 +1,10 @@
 import { createServer } from "http";
 import { parse } from "url";
 import next from "next";
-import { gameWebSocketServer } from "./lib/websocket-server";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "localhost";
 const port = parseInt(process.env.PORT || "3000", 10);
-const wsPort = parseInt(process.env.WS_PORT || "3001", 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -23,11 +21,7 @@ app.prepare().then(() => {
     }
   });
 
-  // Initialize WebSocket server on separate port
-  gameWebSocketServer.initialize(wsPort);
-
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
-    console.log(`> WebSocket server on ws://${hostname}:${wsPort}`);
   });
 });
