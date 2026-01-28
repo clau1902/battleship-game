@@ -31,9 +31,9 @@ export function GameBoard({
       case "hit":
         return "bg-red-500 border-red-600";
       case "miss":
-        return "bg-gray-300 border-gray-400";
+        return "bg-gray-400 border-gray-500";
       case "sunk":
-        return "bg-red-500 border-red-600";
+        return "bg-red-800 border-red-900";
       default:
         return "bg-blue-100 border-blue-300";
     }

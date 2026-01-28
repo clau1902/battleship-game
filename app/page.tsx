@@ -16,6 +16,7 @@ import {
   BattleScreen,
   ResultsScreen,
 } from "@/components/screens";
+import { gameSounds, formatShipName } from "@/lib/sounds";
 
 export default function Home() {
   const [game, setGame] = useState<Game | null>(null);
@@ -152,82 +153,6 @@ export default function Home() {
     document.title = `${statusLabel} - ${roleLabel} - ${shortId} | Battleship`;
   }, [game, playerRole, game?.status, game?.currentTurn]);
 
-  // Long polling for real-time updates
-  useEffect(() => {
-    if (!game || !game._id || !playerRole || game.status === "finished") {
-      return;
-    }
-
-    // Determine if we should poll
-    const shouldPoll =
-      // During placing: poll if waiting for opponent to join or finish
-      (game.status === "placing" && (!game.player2Id || (playerRole === "player1" ? game.player1Ready : game.player2Ready))) ||
-      // During playing: poll if it's opponent's turn
-      (game.status === "playing" && game.currentTurn !== playerRole);
-
-    if (!shouldPoll) {
-      return;
-    }
-
-    let cancelled = false;
-    const controller = new AbortController();
-
-    const longPoll = async () => {
-      while (!cancelled) {
-        try {
-          const since = game.updatedAt ? new Date(game.updatedAt).toISOString() : "";
-          const response = await fetch(
-            `/api/games/${game._id}/poll?since=${encodeURIComponent(since)}`,
-            { signal: controller.signal }
-          );
-
-          if (cancelled) break;
-
-          const data = await response.json();
-          if (response.ok && data.game) {
-            const maskedGame = getPlayerView(data.game, playerRole);
-
-            setGame((prevGame) => {
-              if (!prevGame) return maskedGame;
-
-              // Show notifications for significant changes
-              if (!prevGame.player2Id && data.game.player2Id && playerRole === "player1") {
-                toast({
-                  title: "Opponent Joined!",
-                  description: "Another player has joined the game",
-                });
-              }
-
-              if (prevGame.status === "placing" && data.game.status === "playing") {
-                toast({
-                  title: "Game Started!",
-                  description: "Both players have placed their ships. Let the battle begin!",
-                });
-              }
-
-              return maskedGame;
-            });
-
-            sessionStorage.setItem("battleship-game", JSON.stringify(maskedGame));
-          }
-        } catch (error: any) {
-          if (error.name === "AbortError" || cancelled) {
-            break;
-          }
-          // On error, wait a bit before retrying
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-      }
-    };
-
-    longPoll();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [game?._id, game?.status, game?.currentTurn, game?.player2Id, game?.player1Ready, game?.player2Ready, playerRole, toast]);
-
   // SSE connection for real-time updates
   useEffect(() => {
     if (!game || !game._id || !playerRole || game.status === "finished") {
@@ -248,18 +173,23 @@ export default function Home() {
       setGame((prevGame) => {
         if (!prevGame) return updatedGame;
 
+        // Schedule toasts after render to avoid "Cannot update during render" error
         if (hasPlayer2Changed && playerRole === "player1") {
-          toast({
-            title: "Opponent Joined!",
-            description: "Another player has joined the game",
-          });
+          setTimeout(() => {
+            toast({
+              title: "Opponent Joined!",
+              description: "Another player has joined the game",
+            });
+          }, 0);
         }
 
         if (prevGame.status === "placing" && updatedGame.status === "playing") {
-          toast({
-            title: "Game Started!",
-            description: "Both players have placed their ships. Let the battle begin!",
-          });
+          setTimeout(() => {
+            toast({
+              title: "Game Started!",
+              description: "Both players have placed their ships. Let the battle begin!",
+            });
+          }, 0);
         }
 
         return updatedGame;
@@ -487,26 +417,40 @@ export default function Home() {
         const maskedGame = getPlayerView(data.game, playerRole);
         setGame(maskedGame);
         sessionStorage.setItem("battleship-game", JSON.stringify(maskedGame));
+
+        // Play sound effects
         if (data.result.hit) {
+          if (data.result.sunk) {
+            gameSounds?.playSunk();
+          } else {
+            gameSounds?.playHit();
+          }
           toast({
-            title: "Hit!",
+            title: data.result.sunk ? "Ship Sunk!" : "Hit!",
             description: data.result.sunk
-              ? `You sunk their ${data.result.shipType}!`
+              ? `You sunk their ${formatShipName(data.result.shipType)}!`
               : "You hit a ship!",
           });
         } else {
+          gameSounds?.playMiss();
           toast({
             title: "Miss",
-            description: "You missed",
+            description: "You missed. Turn passes to opponent.",
           });
         }
+
         if (data.game.status === "finished") {
+          const isWinner = data.game.winner === playerRole;
+          if (isWinner) {
+            gameSounds?.playVictory();
+          } else {
+            gameSounds?.playDefeat();
+          }
           toast({
-            title: data.game.winner === playerRole ? "Victory!" : "Defeat",
-            description:
-              data.game.winner === playerRole
-                ? "Congratulations!"
-                : "Better luck next time!",
+            title: isWinner ? "Victory!" : "Defeat",
+            description: isWinner
+              ? "Congratulations! You destroyed the enemy fleet!"
+              : "Your fleet has been destroyed!",
           });
         }
       } else {
@@ -532,6 +476,44 @@ export default function Home() {
     setPlayerRole(null);
     setScreen("setup");
     updateUrl(null, null);
+  };
+
+  const requestRematch = async () => {
+    if (!game || !playerRole) return;
+
+    try {
+      const response = await fetch(`/api/games/${game._id}/rematch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerRole }),
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        // Navigate to the new game
+        setGame(data.game);
+        sessionStorage.setItem("battleship-game", JSON.stringify(data.game));
+        sessionStorage.setItem("battleship-role", playerRole);
+        setScreen("placing");
+        updateUrl(data.game._id, playerRole);
+        toast({
+          title: "Rematch Started!",
+          description: "Place your ships for the next battle.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to create rematch",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create rematch",
+        variant: "destructive",
+      });
+    }
   };
 
   const getPlayerBoard = () => {
@@ -618,6 +600,7 @@ export default function Home() {
             playerBoard={getPlayerBoard()!}
             opponentBoard={getOpponentBoard()!}
             onPlayAgain={playAgain}
+            onRematch={requestRematch}
           />
         );
 

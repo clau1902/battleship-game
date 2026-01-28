@@ -11,6 +11,7 @@ interface ResultsScreenProps {
   playerBoard: Cell[][];
   opponentBoard: Cell[][];
   onPlayAgain: () => void;
+  onRematch: () => void;
 }
 
 export function ResultsScreen({
@@ -18,7 +19,8 @@ export function ResultsScreen({
   playerRole,
   playerBoard,
   opponentBoard,
-  onPlayAgain
+  onPlayAgain,
+  onRematch
 }: ResultsScreenProps) {
   const isWinner = game.winner === playerRole;
 
@@ -76,9 +78,12 @@ export function ResultsScreen({
           />
         </div>
 
-        <div className="text-center">
-          <Button onClick={onPlayAgain} size="lg" className="px-8">
-            Play Again
+        <div className="flex justify-center gap-4">
+          <Button onClick={onRematch} size="lg" className="px-8">
+            Rematch
+          </Button>
+          <Button onClick={onPlayAgain} size="lg" variant="outline" className="px-8">
+            New Game
           </Button>
         </div>
       </div>
